@@ -16,8 +16,6 @@ export default function App() {
   const zoomBehaviorRef = useRef(null);
   const panEnabledRef = useRef(false);
   const [panEnabled, setPanEnabled] = useState(false);
-
-  // Grid
   const [gridEnabled, setGridEnabled] = useState(false);
   const gridEnabledRef = useRef(false);
   const [gridSize, setGridSize] = useState(40);
@@ -25,8 +23,6 @@ export default function App() {
   const gridLayerRef = useRef(null);
   const gridRectRef = useRef(null);
   const defsRef = useRef(null);
-
-  // Versions & state
   const nextIdRef = useRef(1);
   const undoStackRef = useRef([]);
   const redoStackRef = useRef([]);
@@ -38,39 +34,33 @@ export default function App() {
   const statusRef = useRef(null);
   const pathRef = useRef({ nodes: new Set(), edges: new Set(), distance: 0 });
   const layoutModeRef = useRef("force");
-
-  // Analytics & expand
   const [showDegree, setShowDegree] = useState(false);
   const showDegreeRef = useRef(false);
   const expandStateRef = useRef({ active: false, center: null, nodes: new Set(), edges: new Set() });
-
-  // Selection, sidebar
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selection, setSelection] = useState(null);
   const selectionRef = useRef(null);
   const [uiTick, setUiTick] = useState(0);
   const [nodeDraft, setNodeDraft] = useState(null);
-
-  // Search/filter
   const [filter, setFilter] = useState("");
   const filterRef = useRef("");
-
-  // File inputs
   const jsonInputRef = useRef(null);
   const csvInputRef = useRef(null);
   const graphmlInputRef = useRef(null);
-
-  // Theme & notices
   const [dark, setDark] = useState(false);
   const [notice, setNotice] = useState(null);
-
-  // Modal controller
   const [modal, setModal] = useState({ open: false });
+  const NODE_R = 12;
+  const NODE_R_EXPANDED = 14;
+  const LABEL_FONT = 12;
+  const DEGREE_FONT = 10;
+  const EDGE_MIN = 1.25;
+  const EDGE_MAX = 4.5;
+  const ARROW_SIZE = 9;
+  const ARROW_REF_X = NODE_R + 9;
 
-  /* ---------- helpers ---------- */
   const flash = (type, msg, title) => setNotice({ type, msg, title });
   const closeBanner = () => setNotice(null);
-
   const openModal = (cfg) => setModal({ open: true, ...cfg });
   const closeModal = () => setModal({ open: false });
 
@@ -90,8 +80,6 @@ export default function App() {
     });
   };
 
-
-  // Hitta nod via ID eller exakt namn (label), skiftlägesokänsligt
   const findNodeByIdOrLabel = (val) => {
     const raw = String(val ?? "").trim();
     if (!raw) return null;
@@ -101,12 +89,10 @@ export default function App() {
     );
   };
 
-  // Returnerar ett giltigt node-ID om du gav namn/ID, annars originalsträngen
   const resolveIdFromIdOrLabel = (val) => {
     const n = findNodeByIdOrLabel(val);
     return n ? n.id : String(val ?? "");
   };
-
 
   const norm = (s) => String(s ?? "").toLowerCase();
 
@@ -144,7 +130,42 @@ export default function App() {
     return { w, h, innerW: Math.max(1, w - 40), innerH: Math.max(1, h - 40) };
   };
 
-  /* ---------- selection ---------- */
+  const computePageRank = (iterations = 20, damping = 0.85) => {
+    const nodes = nodesRef.current;
+    const n = nodes.length;
+    if (n === 0) return new Map();
+
+    const idToIdx = new Map(nodes.map((node, i) => [String(node.id), i]));
+    const pr = new Array(n).fill(1 / n);
+    const outgoing = new Array(n).fill(0);
+
+    linksRef.current.forEach(l => {
+      const sid = String(getId(l.source));
+      const sidx = idToIdx.get(sid);
+      if (sidx !== undefined) outgoing[sidx]++;
+    });
+
+    for (let iter = 0; iter < iterations; iter++) {
+      const newPr = new Array(n).fill((1 - damping) / n);
+      linksRef.current.forEach(l => {
+        const sid = String(getId(l.source));
+        const tid = String(getId(l.target));
+        const sidx = idToIdx.get(sid);
+        const tidx = idToIdx.get(tid);
+        if (sidx !== undefined && tidx !== undefined && outgoing[sidx] > 0) {
+          newPr[tidx] += damping * (pr[sidx] / outgoing[sidx]);
+        }
+      });
+      for (let i = 0; i < n; i++) pr[i] = newPr[i];
+    }
+
+    const result = new Map();
+    nodes.forEach((node, i) => {
+      result.set(String(node.id), pr[i]);
+    });
+    return result;
+  };
+
   const openPanelFor = (sel) => {
     selectionRef.current = sel;
     setSelection(sel);
@@ -204,7 +225,6 @@ export default function App() {
     flash("success", "Node updated.");
   };
 
-  /* ---------- export helpers (no prompt/alert) ---------- */
   const requestFilename = (def, ext, cb) => {
     openModal({
       title: "Filename",
@@ -272,18 +292,15 @@ export default function App() {
     for (const n of nodes) {
       const id = xmlEscape(n.id);
       const label = xmlEscape(n.label ?? "");
-      the:
-      {
-        const role = xmlEscape(n.role ?? "");
-        const targets = (n.targets ?? []).filter(Boolean).map(String);
-        const sources = (n.sources ?? []).filter(Boolean).map(String);
-        lines.push(`    <node id="${id}">`);
-        lines.push(`      <data key="d_label">${label}</data>`);
-        if (role) lines.push(`      <data key="d_role">${role}</data>`);
-        if (targets.length) lines.push(`      <data key="d_targets">${xmlEscape(targets.join(","))}</data>`);
-        if (sources.length) lines.push(`      <data key="d_sources">${xmlEscape(sources.join(","))}</data>`);
-        lines.push(`    </node>`);
-      }
+      const role = xmlEscape(n.role ?? "");
+      const targets = (n.targets ?? []).filter(Boolean).map(String);
+      const sources = (n.sources ?? []).filter(Boolean).map(String);
+      lines.push(`    <node id="${id}">`);
+      lines.push(`      <data key="d_label">${label}</data>`);
+      if (role) lines.push(`      <data key="d_role">${role}</data>`);
+      if (targets.length) lines.push(`      <data key="d_targets">${xmlEscape(targets.join(","))}</data>`);
+      if (sources.length) lines.push(`      <data key="d_sources">${xmlEscape(sources.join(","))}</data>`);
+      lines.push(`    </node>`);
     }
     lines.push(`  </graph>`, `</graphml>`);
     save(lines.join("\n") + "\n", name, "application/xml;charset=utf-8");
@@ -350,7 +367,6 @@ export default function App() {
     });
   };
 
-  /* ---------- imports ---------- */
   const importJSONFromFile = (file) => {
     if (!file) return;
     const extOK = /\.json$/i.test(file.name) || (file.type || "").includes("json");
@@ -583,7 +599,6 @@ export default function App() {
     reader.readAsText(file);
   };
 
-  /* ---------- init positions ---------- */
   const initializePositions = () => {
     const s = getSize();
     nodesRef.current.forEach((n, i) => {
@@ -599,7 +614,6 @@ export default function App() {
     });
   };
 
-  /* ---------- snapshot / restore ---------- */
   const snapshot = () => ({
     nodes: nodesRef.current.map(n => ({
       id: n.id, label: n.label, x: n.x, y: n.y,
@@ -628,7 +642,6 @@ export default function App() {
     apiRef.current.refreshGraph?.();
   };
 
-  /* ---------- status & styling ---------- */
   const updateStatus = () => {
     if (!statusRef.current) return;
     const n = nodesRef.current.length;
@@ -649,7 +662,6 @@ export default function App() {
     const { nodes, links } = visibleGraph();
     const ids = nodes.map(n => String(n.id));
     const idSet = new Set(ids);
-
     const deg = new Map(ids.map(id => [id, 0]));
     links.forEach(l => {
       const s = String(getId(l.source));
@@ -659,7 +671,6 @@ export default function App() {
         deg.set(t, (deg.get(t) || 0) + 1);
       }
     });
-
     const adj = new Map(ids.map(id => [id, []]));
     links.forEach(l => {
       const s = String(getId(l.source));
@@ -686,7 +697,6 @@ export default function App() {
       }
       cid++;
     }
-
     const byId = new Map(nodesRef.current.map(n => [String(n.id), n]));
     ids.forEach(id => {
       const n = byId.get(id);
@@ -707,6 +717,21 @@ export default function App() {
     expandStateRef.current = { active: true, center: id, nodes: neigh, edges };
   };
   const clearExpansionState = () => { expandStateRef.current = { active: false, center: null, nodes: new Set(), edges: new Set() }; };
+
+  const edgeIsSelected = (d) => {
+    if (!selectionRef.current || selectionRef.current.type !== "edge") return false;
+    const sid = String(getId(d.source)); const tid = String(getId(d.target));
+    const { source, target } = selectionRef.current;
+    return (idEq(sid, source) && idEq(tid, target)) || (idEq(sid, target) && idEq(tid, source));
+  };
+
+  const edgeBaseWidth = (d) => {
+    const w = Number(d.weight);
+    const weight = Number.isFinite(w) ? Math.max(0, Math.abs(w)) : 1;
+    const scaled = Math.sqrt(weight);
+    const norm = scaled / (1 + scaled);
+    return EDGE_MIN + norm * (EDGE_MAX - EDGE_MIN);
+  };
 
   const updateSelectionStyles = () => {
     if (!gRef.current) return;
@@ -734,7 +759,7 @@ export default function App() {
         if (onPathNode(d.id)) return 3;
         return 0;
       })
-      .attr("r", d => (expandStateRef.current.active && expandStateRef.current.nodes.has(String(d.id)) ? 10 : 8))
+      .attr("r", d => (expandStateRef.current.active && expandStateRef.current.nodes.has(String(d.id)) ? NODE_R_EXPANDED : NODE_R))
       .attr("fill", "#69b3a2");
 
     gRef.current.selectAll("line.link")
@@ -751,26 +776,19 @@ export default function App() {
       })
       .attr("stroke-width", d => {
         const base = edgeBaseWidth(d);
-        if (edgeIsSelected(d)) return base + 2;
-        if (onPathEdge(d)) return base + 2;
+        if (edgeIsSelected(d)) return Math.min(EDGE_MAX + 2, base + 2);
+        if (onPathEdge(d)) return Math.min(EDGE_MAX + 2, base + 2);
         return base;
+      })
+      .attr("marker-end", d => {
+        if (edgeIsSelected(d)) return "url(#arrow-selected)";
+        if (onPathEdge(d)) return "url(#arrow-path)";
+        return "url(#arrow-default)";
       });
 
     gRef.current.selectAll("text.degree-label").attr("display", showDegreeRef.current ? null : "none");
   };
 
-  const edgeIsSelected = (d) => {
-    if (!selectionRef.current || selectionRef.current.type !== "edge") return false;
-    const sid = String(getId(d.source)); const tid = String(getId(d.target));
-    const { source, target } = selectionRef.current;
-    return (idEq(sid, source) && idEq(tid, target)) || (idEq(sid, target) && idEq(tid, source));
-  };
-  const edgeBaseWidth = (d) => {
-    const w = Number(d.weight);
-    return Number.isFinite(w) ? Math.max(1, Math.abs(w)) : 1;
-  };
-
-  /* ---------- D3 setup ---------- */
   useEffect(() => {
     nodesRef.current = [];
     linksRef.current = [];
@@ -792,7 +810,24 @@ export default function App() {
     const svg = root.append("svg").attr("width", "100%").attr("height", "100%");
     svgRef.current = svg;
 
-    const defs = svg.append("defs"); defsRef.current = defs;
+    const defs = svg.append("defs");
+    defsRef.current = defs;
+
+    const makeArrow = (id, color) => {
+      const m = defs.append("marker")
+        .attr("id", id)
+        .attr("viewBox", "0 0 10 10")
+        .attr("refX", ARROW_REF_X)
+        .attr("refY", 5)
+        .attr("markerWidth", ARROW_SIZE)
+        .attr("markerHeight", ARROW_SIZE)
+        .attr("orient", "auto")
+        .attr("markerUnits", "userSpaceOnUse");
+      m.append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", color);
+    };
+    makeArrow("arrow-default", "#999");
+    makeArrow("arrow-selected", "red");
+    makeArrow("arrow-path", "#f39c12");
 
     const bg = svg
       .append("rect").attr("class", "zoom-bg")
@@ -907,6 +942,7 @@ export default function App() {
       const linkEnter = linkSel.enter()
         .append("line").attr("class", "link").attr("stroke", "#999")
         .attr("stroke-width", d => edgeBaseWidth(d)).style("cursor", "pointer")
+        .attr("marker-end", "url(#arrow-default)")
         .on("click", (event, d) => {
           event.stopPropagation();
           const sid = String(getId(d.source));
@@ -921,18 +957,18 @@ export default function App() {
 
       const nodeEnter = nodeSel.enter().append("g").attr("class", "node").call(drag);
 
-      nodeEnter.append("circle").attr("r", 8).attr("fill", "#69b3a2")
+      nodeEnter.append("circle").attr("r", NODE_R).attr("fill", "#69b3a2")
         .style("cursor", "pointer").style("pointer-events", "auto")
         .on("click", (event, d) => { event.stopPropagation(); openPanelFor({ type: "node", id: d.id }); updateSelectionStyles(); });
 
       nodeEnter.append("text")
         .text(d => d.label).attr("text-anchor", "middle").attr("dy", "0.35em").attr("pointer-events", "none")
-        .style("font-size", "12px").style("font-family", "system-ui, -apple-system, Segoe UI, Roboto, Arial")
+        .style("font-size", `${LABEL_FONT}px`).style("font-family", "system-ui, -apple-system, Segoe UI, Roboto, Arial")
         .style("paint-order", "stroke").style("stroke", "#69b3a2").style("stroke-width", 3);
 
       nodeEnter.append("text")
         .attr("class", "degree-label").attr("text-anchor", "middle").attr("dy", "1.6em").attr("pointer-events", "none")
-        .style("font-size", "10px").style("font-family", "system-ui, -apple-system, Segoe UI, Roboto, Arial").style("fill", "#334155")
+        .style("font-size", `${DEGREE_FONT}px`).style("font-family", "system-ui, -apple-system, Segoe UI, Roboto, Arial").style("fill", "#334155")
         .text(d => String(d._degree ?? 0));
 
       nodeSel = nodeEnter.merge(nodeSel);
@@ -977,7 +1013,6 @@ export default function App() {
     const addUnique = (arr, v) => (arr.includes(v) ? arr : [...arr, v]);
     const removeVal = (arr, v) => arr.filter(x => x !== v);
 
-    /* ----- API methods (no alerts) ----- */
     apiRef.current.addNode = label => {
       const name = String(label ?? "").trim();
       if (!name) return;
@@ -1020,46 +1055,35 @@ export default function App() {
       flash("success", `Linked ${sNode.id} → ${tNode.id}`);
     };
 
-
-    // Lägg till kant via ID eller namn på båda sidorna
     apiRef.current.addLinkSmart = (a, b) => {
       const ida = resolveIdFromIdOrLabel(a);
       const idb = resolveIdFromIdOrLabel(b);
-
       const sNode = nodesRef.current.find(n => idEq(n.id, ida));
       const tNode = nodesRef.current.find(n => idEq(n.id, idb));
-
       if (!sNode || !tNode) {
-        flash("error", `Kunde inte hitta båda noderna: "${a}" och "${b}" (ID eller namn).`);
+        flash("error", `Could not find both nodes: "${a}" and "${b}" (ID or name).`);
         return;
       }
       if (idEq(sNode.id, tNode.id)) {
-        flash("error", "Kan inte koppla en nod till sig själv.");
+        flash("error", "Cannot connect a node to itself.");
         return;
       }
-
       const exists = linksRef.current.some(l => {
         const sid = getId(l.source); const tid = getId(l.target);
         return (idEq(sid, sNode.id) && idEq(tid, tNode.id)) ||
               (idEq(sid, tNode.id) && idEq(tid, sNode.id));
       });
-      if (exists) { flash("info", "Denna kant finns redan."); return; }
-
-      // Lägg till länken
+      if (exists) { flash("info", "This edge already exists."); return; }
       undoStackRef.current.push(snapshot());
       redoStackRef.current = [];
       linksRef.current.push({ source: sNode.id, target: tNode.id, weight: 1 });
       sNode.targets = (sNode.targets ?? []).includes(tNode.id) ? sNode.targets : [...(sNode.targets ?? []), tNode.id];
       tNode.sources = (tNode.sources ?? []).includes(sNode.id) ? tNode.sources : [...(tNode.sources ?? []), sNode.id];
-
       apiRef.current.refreshGraph();
       apiRef.current.listNodes();
       recordVersion("add_link", { source: sNode.id, target: tNode.id });
-      flash("success", `Länkad ${sNode.id} → ${tNode.id}`);
+      flash("success", `Linked ${sNode.id} → ${tNode.id}`);
     };
-
-
-
 
     apiRef.current.removeLink = (sourceId, targetId) => {
       const sId = String(sourceId ?? "").trim(); const tId = String(targetId ?? "").trim();
@@ -1092,33 +1116,27 @@ export default function App() {
       flash("success", `Removed edge ${sId} — ${tId}`);
     };
 
-    // Ta bort nod via ID eller namn
     apiRef.current.removeNodeSmart = (idOrName) => {
       const id = resolveIdFromIdOrLabel(idOrName);
       const exists = nodesRef.current.some((n) => idEq(n.id, id));
       if (!exists) {
-        flash("error", `Hittade ingen nod med ID eller namn "${idOrName}".`);
+        flash("error", `Could not find node with ID or name "${idOrName}".`);
         return;
       }
       apiRef.current.removeNode(id);
     };
 
-    // Ta bort kant via ID eller namn på båda sidorna
     apiRef.current.removeLinkSmart = (a, b) => {
       const ida = resolveIdFromIdOrLabel(a);
       const idb = resolveIdFromIdOrLabel(b);
       const haveA = nodesRef.current.some((n) => idEq(n.id, ida));
       const haveB = nodesRef.current.some((n) => idEq(n.id, idb));
       if (!haveA || !haveB) {
-        flash(
-          "error",
-          `Hittade inte båda noderna: "${a}" och "${b}" (ID eller namn).`
-        );
+        flash("error", `Could not find both nodes: "${a}" and "${b}" (ID or name).`);
         return;
       }
       apiRef.current.removeLink(ida, idb);
     };
-
 
     apiRef.current.removeNode = nodeId => {
       const id = String(nodeId ?? "").trim();
@@ -1171,7 +1189,6 @@ export default function App() {
       apiRef.current.listNodes();
     };
 
-    /* ----- Layouts ----- */
     apiRef.current.layoutHierarchical = (orientation = "TB") => {
       if (simRef.current) simRef.current.stop();
       if (gRef.current) gRef.current.selectAll("circle.ring").remove();
@@ -1371,31 +1388,44 @@ export default function App() {
       apiRef.current.refreshGraph(); updateSelectionStyles();
     };
 
-    /* ----- Shortest path ----- */
-    const dijkstraShortestPath = (srcId, dstId, { directed = false } = {}) => {
-      const src = String(srcId ?? "").trim(); const dst = String(dstId ?? "").trim();
+    const dijkstraShortestPath = (srcId, dstId) => {
+      const src = String(srcId ?? "").trim();
+      const dst = String(dstId ?? "").trim();
       if (!src || !dst) return null;
       const haveId = new Set(nodesRef.current.map(n => String(n.id)));
-      if (!haveId.has(src) || !haveId.has(dst)) { flash("error", "One or both node IDs do not exist."); return null; }
+      if (!haveId.has(src) || !haveId.has(dst)) {
+        flash("error", "One or both node IDs do not exist.");
+        return null;
+      }
       if (src === dst) return { path: [src], distance: 0 };
 
-      const adj = new Map(); nodesRef.current.forEach(n => adj.set(String(n.id), []));
+      const adj = new Map();
+      nodesRef.current.forEach(n => adj.set(String(n.id), []));
       for (const l of linksRef.current) {
-        const s = String(getId(l.source)); const t = String(getId(l.target));
+        const s = String(getId(l.source));
+        const t = String(getId(l.target));
         if (!adj.has(s) || !adj.has(t)) continue;
         const wRaw = Number(l.weight);
-        if (Number.isFinite(wRaw) && wRaw < 0) { flash("error", "Negative weights are not supported by Dijkstra."); return null; }
+        if (Number.isFinite(wRaw) && wRaw < 0) {
+          flash("error", "Negative weights are not supported by Dijkstra.");
+          return null;
+        }
         const w = Number.isFinite(wRaw) ? wRaw : 1;
-        adj.get(s).push({ v: t, w }); if (!directed) adj.get(t).push({ v: s, w });
+        adj.get(s).push({ v: t, w });
       }
 
       const dist = new Map(Array.from(adj.keys()).map(k => [k, Infinity]));
-      const prev = new Map(); const visited = new Set(); dist.set(src, 0);
+      const prev = new Map();
+      const visited = new Set();
+      dist.set(src, 0);
 
       while (visited.size < adj.size) {
         let u = null, best = Infinity;
-        for (const [k, d] of dist.entries()) if (!visited.has(k) && d < best) { best = d; u = k; }
-        if (u == null) break; if (u === dst) break;
+        for (const [k, d] of dist.entries()) {
+          if (!visited.has(k) && d < best) { best = d; u = k; }
+        }
+        if (u == null) break;
+        if (u === dst) break;
         visited.add(u);
         for (const { v, w } of adj.get(u)) {
           if (visited.has(v)) continue;
@@ -1406,8 +1436,13 @@ export default function App() {
 
       if (!prev.has(dst) && src !== dst) return null;
 
-      const path = []; let cur = dst; path.push(cur);
-      while (prev.has(cur)) { cur = prev.get(cur); path.push(cur); }
+      const path = [];
+      let cur = dst;
+      path.push(cur);
+      while (prev.has(cur)) {
+        cur = prev.get(cur);
+        path.push(cur);
+      }
       path.reverse();
       return { path, distance: dist.get(dst) };
     };
@@ -1420,8 +1455,8 @@ export default function App() {
       updateSelectionStyles(); updateStatus();
     };
 
-    apiRef.current.shortestPath = (a, b, opts = {}) => {
-      const res = dijkstraShortestPath(a, b, opts);
+    apiRef.current.shortestPath = (a, b) => {
+      const res = dijkstraShortestPath(a, b);
       if (!res) { flash("info", "No path found."); return; }
       showPath(res.path, res.distance);
       flash("success", `Shortest path ${a} → ${b}\nNodes: ${res.path.join(" → ")}\nTotal weight: ${res.distance}`);
@@ -1432,7 +1467,6 @@ export default function App() {
       updateSelectionStyles(); updateStatus(); flash("info", "Path cleared");
     };
 
-    /* ----- Versions ----- */
     apiRef.current.gotoVersion = vid => {
       if (!vid && vid !== 0) return flash("error", "Wrong version number.");
       const idNum = Number(String(vid).trim());
@@ -1495,7 +1529,6 @@ export default function App() {
       flash("success", `Restored saved version "${v.name}"`);
     };
 
-    // Example data
     const controller = new AbortController();
     d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/data_network.json", { signal: controller.signal })
       .then(data => {
@@ -1543,9 +1576,8 @@ export default function App() {
       window.removeEventListener("resize", onResize);
       root.selectAll("*").remove();
     };
-  }, []); // D3 setup
+  }, []);
 
-  /* ---------- UI handlers that used to use prompt/alert ---------- */
   const handleAddNode = () => {
     openModal({
       title: "Add node",
@@ -1556,7 +1588,6 @@ export default function App() {
     });
   };
 
-
   const handleAddLink = () => {
     const nodeIds = nodesRef.current.map(n => String(n.id));
     const nodeLabels = nodesRef.current.map(n => String(n.label ?? "")).filter(Boolean);
@@ -1565,10 +1596,10 @@ export default function App() {
 
     openModal({
       title: "Add edge",
-      description: "Koppla två noder med ID eller namn (skiftlägesokänsligt).",
+      description: "Connect two nodes with ID or name (case-insensitive).",
       fields: [
-        { name: "a", label: "Källa (ID eller namn)",  placeholder: "t.ex. n1 eller Alice", datalistOptions: options },
-        { name: "b", label: "Mål (ID eller namn)",    placeholder: "t.ex. n2 eller Bob",   datalistOptions: options },
+        { name: "a", label: "Source (ID or name)",  placeholder: "e.g. n1 or Alice", datalistOptions: options },
+        { name: "b", label: "Target (ID or name)",    placeholder: "e.g. n2 or Bob",   datalistOptions: options },
       ],
       confirmText: "Connect",
       onSubmit: ({ a, b }) => { closeModal(); apiRef.current.addLinkSmart(a, b); },
@@ -1576,25 +1607,23 @@ export default function App() {
     });
   };
 
-
   const handleRemoveLink = () => {
     const nodeIds = nodesRef.current.map(n => String(n.id));
     const nodeLabels = nodesRef.current.map(n => String(n.label ?? "")).filter(Boolean);
     const options = Array.from(new Set([...nodeIds, ...nodeLabels])).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
 
     openModal({
-      title: "Ta bort kant",
-      description: "Ange två noder med ID eller namn (skiftlägesokänsligt).",
+      title: "Remove edge",
+      description: "Specify two nodes with ID or name (case-insensitive).",
       fields: [
-        { name: "a", label: "A (ID eller namn)", placeholder: "t.ex. n1 eller Alice", datalistOptions: options },
-        { name: "b", label: "B (ID eller namn)", placeholder: "t.ex. n2 eller Bob", datalistOptions: options },
+        { name: "a", label: "A (ID or name)", placeholder: "e.g. n1 or Alice", datalistOptions: options },
+        { name: "b", label: "B (ID or name)", placeholder: "e.g. n2 or Bob", datalistOptions: options },
       ],
-      confirmText: "Ta bort",
+      confirmText: "Remove",
       onSubmit: ({ a, b }) => { closeModal(); apiRef.current.removeLinkSmart(a, b); },
       onClose: closeModal
     });
   };
-
 
   const handleRemoveNode = () => {
     const nodeIds = nodesRef.current.map(n => String(n.id));
@@ -1602,14 +1631,13 @@ export default function App() {
     const options = Array.from(new Set([...nodeIds, ...nodeLabels])).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
 
     openModal({
-      title: "Ta bort nod",
-      fields: [{ name: "key", label: "ID eller namn", placeholder: "t.ex. n2 eller Alice", datalistOptions: options }],
-      confirmText: "Ta bort",
+      title: "Remove node",
+      fields: [{ name: "key", label: "ID or name", placeholder: "e.g. n2 or Alice", datalistOptions: options }],
+      confirmText: "Remove",
       onSubmit: ({ key }) => { closeModal(); apiRef.current.removeNodeSmart(key); },
       onClose: closeModal
     });
   };
-
 
   const handleUndo = () => apiRef.current.undo();
   const handleRedo = () => apiRef.current.redo();
@@ -1667,15 +1695,18 @@ export default function App() {
   };
 
   const handleShortestPath = () => {
+    const nodeIds = nodesRef.current.map(n => String(n.id));
+    const nodeLabels = nodesRef.current.map(n => String(n.label ?? "")).filter(Boolean);
+    const options = Array.from(new Set([...nodeIds, ...nodeLabels])).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
     openModal({
       title: "Shortest path",
-      description: "Undirected, weighted by edge weight (>=0).",
+      description: "Directed path, weighted by edge weight (>=0).",
       fields: [
-        { name: "a", label: "From ID", placeholder: "e.g. n1" },
-        { name: "b", label: "To ID", placeholder: "e.g. n7" },
+        { name: "a", label: "From ID", placeholder: "e.g. n1", datalistOptions: options },
+        { name: "b", label: "To ID", placeholder: "e.g. n7", datalistOptions: options },
       ],
       confirmText: "Find",
-      onSubmit: ({ a, b }) => { closeModal(); apiRef.current.shortestPath(a, b, { directed: false }); },
+      onSubmit: ({ a, b }) => { closeModal(); apiRef.current.shortestPath(a, b); },
       onClose: closeModal
     });
   };
@@ -1726,7 +1757,7 @@ export default function App() {
     const link = findLink(a, b);
     if (!link) return;
     const num = Number(val);
-    link.weight = Number.isFinite(num) ? num : 1;
+    link.weight = Number.isFinite(num) ? Math.abs(num) : 1;
     apiRef.current.refreshGraph();
     setUiTick(t => t + 1);
     flash("info", `Edge weight: ${a}—${b} = ${link.weight}`);
@@ -1750,6 +1781,12 @@ export default function App() {
 
   const undoDisabled = undoStackRef.current.length === 0;
   const redoDisabled = redoStackRef.current.length === 0;
+
+  const selectedNodePageRank = () => {
+    if (!selection || selection.type !== "node") return null;
+    const pr = computePageRank();
+    return pr.get(String(selection.id));
+  };
 
   return (
     <div className={`app ${dark ? "dark" : ""}`}>
@@ -1790,7 +1827,6 @@ export default function App() {
           dark={dark}
         />
 
-        {/* Inline notice banner */}
         <Banner notice={notice} onDismiss={closeBanner} />
 
         <input
@@ -1829,6 +1865,10 @@ export default function App() {
                   <div className="panel-group">
                     <label className="panel-label">Role</label>
                     <input className="panel-input" value={nodeDraft?.role ?? ""} onChange={(e) => setNodeDraft(d => ({ ...(d || {}), role: e.target.value }))}/>
+                  </div>
+                  <div className="panel-group">
+                    <label className="panel-label">PageRank</label>
+                    <input className="panel-input panel-readonly" readOnly value={(selectedNodePageRank() ?? 0).toFixed(6)}/>
                   </div>
                   <div className="panel-group">
                     <label className="panel-label">Sources (incoming)</label>
@@ -1870,12 +1910,10 @@ export default function App() {
         )}
       </div>
 
-      {/* hidden inputs for import */}
       <input ref={jsonInputRef} type="file" accept="application/json,.json" style={{ display: "none" }} onChange={(e) => importJSONFromFile(e.target.files?.[0])}/>
       <input ref={csvInputRef} type="file" accept="text/csv,.csv" style={{ display: "none" }} onChange={(e) => importCSVFromFile(e.target.files?.[0])}/>
       <input ref={graphmlInputRef} type="file" accept=".graphml,application/xml,text/xml" style={{ display: "none" }} onChange={(e) => importGraphMLFromFile(e.target.files?.[0])}/>
 
-      {/* global modal */}
       <Modal
         open={modal.open}
         title={modal.title}

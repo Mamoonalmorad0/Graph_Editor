@@ -43,8 +43,8 @@ export default function Toolbar({
     onClearPath, onShortestPath, onToggleGrid, onGridSize, gridEnabled,
     onToggleDark, dark
 }) {
-    // open only one dropdown at a time
-    const [open, setOpen] = useState(null); // 'nodes' | 'edges' | 'layout' | 'export' | 'import' | 'versions' | null
+    
+    const [open, setOpen] = useState(null); 
     const rootRef = useRef(null);
 
     const toggle = (key) => setOpen(cur => (cur === key ? null : key));
@@ -61,7 +61,7 @@ export default function Toolbar({
 
     return (
         <div ref={rootRef} className="toolbar">
-            {/* OUTER quick actions */}
+            
             <button className="icon-btn hover-red" onClick={onUndo} disabled={undoDisabled} title="Undo">
                 <IconUndo /><span className="sr-only">Undo</span>
             </button>
@@ -77,7 +77,6 @@ export default function Toolbar({
 
             <div className="v-sep" />
 
-            {/* NODES */}
             <div className={`dd ${open === "nodes" ? "open" : ""}`}>
                 <button className="dd-btn hover-red" onClick={() => toggle("nodes")}>Nodes <ChevronDown /></button>
                 {open === "nodes" && (
@@ -88,7 +87,6 @@ export default function Toolbar({
                 )}
             </div>
 
-            {/* EDGES */}
             <div className={`dd ${open === "edges" ? "open" : ""}`}>
                 <button className="dd-btn hover-red" onClick={() => toggle("edges")}>Edges <ChevronDown /></button>
                 {open === "edges" && (
@@ -99,7 +97,6 @@ export default function Toolbar({
                 )}
             </div>
 
-            {/* LAYOUT */}
             <div className={`dd ${open === "layout" ? "open" : ""}`}>
                 <button className="dd-btn hover-red" onClick={() => toggle("layout")}>Layout <ChevronDown /></button>
                 {open === "layout" && (
@@ -127,7 +124,6 @@ export default function Toolbar({
                 )}
             </div>
 
-            {/* EXPORT */}
             <div className={`dd ${open === "export" ? "open" : ""}`}>
                 <button className="dd-btn hover-red" onClick={() => toggle("export")}>Export <ChevronDown /></button>
                 {open === "export" && (
@@ -140,7 +136,6 @@ export default function Toolbar({
                 )}
             </div>
 
-            {/* IMPORT */}
             <div className={`dd ${open === "import" ? "open" : ""}`}>
                 <button className="dd-btn hover-red" onClick={() => toggle("import")}>Import <ChevronDown /></button>
                 {open === "import" && (
@@ -152,7 +147,6 @@ export default function Toolbar({
                 )}
             </div>
 
-            {/* VERSIONS */}
             <div className={`dd ${open === "versions" ? "open" : ""}`}>
                 <button className="dd-btn hover-red" onClick={() => toggle("versions")}>Versions <ChevronDown /></button>
                 {open === "versions" && (
@@ -167,10 +161,8 @@ export default function Toolbar({
                 )}
             </div>
 
-            {/* spacer */}
             <div className="grow" />
 
-            {/* Dark mode toggle */}
             <button className="dark-btn hover-red" onClick={onToggleDark}>
                 {dark ? "Dark: ON" : "Dark: OFF"}
             </button>
